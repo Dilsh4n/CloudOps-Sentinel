@@ -1,19 +1,19 @@
 from datetime import datetime, timezone
 from fastapi import FastAPI
 
-app = FastAPI(
+testapp = FastAPI(
     title="CloudOps Sentinel API",
     version="0.1.0"
 )
 
-@app.get("/")
+@testapp.get("/")
 def home():
     return {
         "application": "CloudOps Sentinel",
         "message": "API is running"
     }
 
-@app.get("/health")
+@testapp.get("/health")
 def health():
     return {
         "status": "healthy",
