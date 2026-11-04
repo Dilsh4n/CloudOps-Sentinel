@@ -1,6 +1,9 @@
 from unittest.mock import Mock
+
 import requests
+
 from scripts.smoke_test import check_health
+
 
 def test_healthy_response(monkeypatch):
     response = Mock()

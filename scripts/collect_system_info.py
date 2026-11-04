@@ -1,12 +1,12 @@
-import json #convert python data to and from JSON
-import os #Discover logical CPU count
-import platform #Read the linux kernel verison
-import shutil #Read file system disk usage
-import socket #Read the hostname
-import subprocess #Execute linux commands
-import sys #print error and return exit codes
+import json  #convert python data to and from JSON
+import os  #Discover logical CPU count
+import platform  #Read the linux kernel verison
+import shutil  #Read file system disk usage
+import socket  #Read the hostname
+import subprocess  #Execute linux commands
+import sys  #print error and return exit codes
+from datetime import UTC, datetime
 
-from datetime import datetime, timezone
 
 def get_os_name():
     with open("/etc/os-release", "r", encoding="utf-8") as file:
@@ -86,7 +86,7 @@ def get_network_info():
 
 def collect_system_info():
     return{
-        "collected at": datetime.now(timezone.utc).isoformat(),
+        "collected at": datetime.now(UTC).isoformat(),
         "host": {
             "hostname": socket.gethostname(),
             "os": get_os_name(),

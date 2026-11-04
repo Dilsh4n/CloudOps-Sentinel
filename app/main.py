@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from fastapi import FastAPI
 
 testapp = FastAPI(
@@ -17,5 +18,5 @@ def home():
 def health():
     return {
         "status": "healthy",
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "timestamp": datetime.now(UTC).isoformat()
     }

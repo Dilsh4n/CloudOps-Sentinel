@@ -1,6 +1,8 @@
 import argparse
 import sys
+
 import requests
+
 
 def check_health(baseurl, timeout):
     health_url = f"{baseurl.rstrip('/')}/health"
@@ -28,7 +30,7 @@ def check_health(baseurl, timeout):
     # Parse the JSON response
     try:
         data = response.json()
-    except:
+    except requests.exceptions.JSONDecodeError:
         print("[FAIL] Invalid JSON response")
         return False
 

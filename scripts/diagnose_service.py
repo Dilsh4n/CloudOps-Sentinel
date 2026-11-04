@@ -1,6 +1,6 @@
 import argparse
-import sys
 import subprocess
+import sys
 
 
 def run_command(command):
@@ -9,6 +9,7 @@ def run_command(command):
             command,
             capture_output=True,
             text=True,
+            check=False,
             timeout=10
         )
 
