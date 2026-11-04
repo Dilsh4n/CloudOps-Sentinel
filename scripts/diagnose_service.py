@@ -35,7 +35,7 @@ def get_service_info(service):
     for line in result.stdout.splitlines():
         if "=" in line:
             key,value = line.split("=",1)
-            service_info[key] = value
+            service_info[key.strip()] = value
 
     return service_info
 

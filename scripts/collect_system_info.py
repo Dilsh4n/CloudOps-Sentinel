@@ -20,9 +20,12 @@ def get_memory_info():
 
     with open("/proc/meminfo", "r", encoding="utf-8") as file:
         for line in file:
-            key, value = line.split(":",1)
+            if not line.strip() or ":" not in line:
+                continue
+            
+            key, value = line.strip().split(":",1)
 
-            memroy[key] = int(value.strip().split()[0])/1024
+            memroy[key.strip()] = int(value.strip().split()[0])/1024
 
     total = memroy["MemTotal"]
     available = memroy["MemAvailable"]
