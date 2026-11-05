@@ -30,7 +30,7 @@ def check_health(baseurl, timeout):
     # Parse the JSON response
     try:
         data = response.json()
-    except requests.exceptions.JSONDecodeError:
+    except :
         print("[FAIL] Invalid JSON response")
         return False
 
