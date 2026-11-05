@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
-# -e exit if any unhandled command failure occur
+# -e errexit => exit if any unhandled command failure occur
 # -u treat reference to unset variables as errors
 # -o pipefail - make pipeline fail if any commands in it fails
 
