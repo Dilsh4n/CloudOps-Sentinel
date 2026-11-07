@@ -14,7 +14,11 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PYTHON_VERSION: '3.14'
+
 jobs:
+
   quality:
     name: Python and Bash validation
     runs-on: ubuntu-24.04
@@ -29,7 +33,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7.1.0
         with:
-          python-version: '3.14'
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: requirements-pinned.txt
 
@@ -38,5 +42,71 @@ jobs:
           python --version
           python -m pip install -r requirements-pinned.txt
 
-      - name: Run CI checks
+      - name: Run existing CI checks
         run: bash scripts/check_ci.sh
+
+
+# job2: Compatibility
+  Compatibility:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: setup python
+        uses: actions/setup-python@v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-pinned.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-pinned.txt
+
+      - name: Run tests and generate report
+        run: |
+          mkdir -p reports
+          python -m pytest -q --junitxml=reports/pytest.xml
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pytest-${{ matrix.os }}
+          path: reports/pytest.xml
+          retention-days: 7
+
+  # Job 3: Final quality gate
+  gate:
+    name: CI Gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    needs: [quality, compatibility]
+    if: ${{ always() }}
+
+    steps:
+      - name: Verify dependent jobs
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
+        run: |
+          echo "Quality result: $QUALITY_RESULT"
+          echo "Compatibility result: $COMPATIBILITY_RESULT"
+
+          if [[ "$QUALITY_RESULT" != "success" ||
+                "$COMPATIBILITY_RESULT" != "success" ]]; then
+            echo "CI pipeline failed"
+            exit 1
+          fi
+
+          echo "All CI checks passed"
