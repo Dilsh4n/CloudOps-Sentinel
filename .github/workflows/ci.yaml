@@ -80,31 +80,93 @@ jobs:
 
       - name: Upload test report
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: pytest-${{ matrix.os }}
           path: reports/pytest.xml
           retention-days: 7
 
-  # Job 3: Final quality gate
+  # Job 3: image build and push to GHCR
+  container:
+    name: Docker image validation
+    needs: [quality, compatibility]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.4.1
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: cloudops-sentinel:ci
+          cache-from: type=gha
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max' || '' }}
+
+      - name: Start application container
+        run: |
+          docker run -d \
+            --name cloudops-sentinel-ci \
+            -p 127.0.0.1:8000:8000 \
+            cloudops-sentinel:ci
+
+      - name: Smoke test application
+        run: |
+          for attempt in {1..20}; do
+            if curl --fail --silent \
+              http://127.0.0.1:8000/health; then
+              echo "Container smoke test passed"
+              exit 0
+            fi
+
+            echo "Application not ready yet..."
+            sleep 2
+          done
+
+          echo "Container smoke test failed"
+          exit 1
+
+      - name: Show container logs on failure
+        if: ${{ failure() }}
+        run: docker logs cloudops-sentinel-ci || true
+
+      - name: Remove temporary container
+        if: ${{ always() }}
+        run: docker rm -f cloudops-sentinel-ci || true
+
+
+  # Job 4: Final quality gate
   gate:
     name: CI Gate
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [quality, compatibility]
+    needs: [quality, compatibility, container]
     if: ${{ always() }}
 
     steps:
-      - name: Verify dependent jobs
+      - name: Verify all CI gate
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
           COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
+          CONTAINER_RESULT: ${{ needs.container.result }}
+
         run: |
           echo "Quality result: $QUALITY_RESULT"
           echo "Compatibility result: $COMPATIBILITY_RESULT"
+          echo "Container result: $CONTAINER_RESULT"
 
           if [[ "$QUALITY_RESULT" != "success" ||
-                "$COMPATIBILITY_RESULT" != "success" ]]; then
+                "$COMPATIBILITY_RESULT" != "success" || 
+                "$CONTAINER_RESULT" != "success" ]]; then
             echo "CI pipeline failed"
             exit 1
           fi
