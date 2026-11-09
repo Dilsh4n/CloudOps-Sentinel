@@ -82,8 +82,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: pytest-${{ matrix.os }}
           path: reports/pytest.xml
+          name: pytest-${{ matrix.os }}
           retention-days: 7
 
   # Job 3: image build and push to GHCR
@@ -158,11 +158,16 @@ jobs:
           QUALITY_RESULT: ${{ needs.quality.result }}
           COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
           CONTAINER_RESULT: ${{ needs.container.result }}
+          ASSOCIATED_ACCOUNT: ${{ github.actor }}
+          ASSOCIATED_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
         run: |
           echo "Quality result: $QUALITY_RESULT"
           echo "Compatibility result: $COMPATIBILITY_RESULT"
           echo "Container result: $CONTAINER_RESULT"
+          echo "Associated GH account: ${{ github.actor }}"
+          echo "Associated GH Token: ${{ secrets.GITHUB_TOKEN }}"
+          echo "Github repository : ${{ github.repository }}"
 
           if [[ "$QUALITY_RESULT" != "success" ||
                 "$COMPATIBILITY_RESULT" != "success" || 
@@ -172,3 +177,87 @@ jobs:
           fi
 
           echo "All CI checks passed"
+
+  
+  # Job 5: Publish validated application to GHCR
+  publish:
+    name: Publish Docker image to GHCR
+    needs: gate
+
+    # Publish only on pushes to main
+    if: >-
+      ${{
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/main'
+      }}
+
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # Step 1: Download the source code
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      # Step 2: Prepare Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.4.1
+
+      # Step 3: Authenticate to GHCR
+      - name: Login to GHCR
+        uses: docker/login-action@v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 4: Generate image tags and labels
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=CloudOps Sentinel monitoring API
+
+      # Step 5: Build and publish the image
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Step 6: Display published image information
+      - name: Show published image details
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          echo "Published image tags:"
+          printf '%s\n' "$IMAGE_TAGS"
+
+          echo "Image digest: $IMAGE_DIGEST"
+
+          {
+            echo "### Published Docker image"
+            printf '%s\n' "$IMAGE_TAGS"
+            echo "Digest: $IMAGE_DIGEST"
+          } >> "$GITHUB_STEP_SUMMARY"
+
