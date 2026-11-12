@@ -22,7 +22,7 @@ def health():
     }
 
 @testapp.get("/version")
-def health():
+def version():
     return {
         "version": "v 0.0.1",
         "timestamp": datetime.now(UTC).isoformat()
