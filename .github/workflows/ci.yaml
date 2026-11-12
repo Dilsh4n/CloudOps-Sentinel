@@ -261,3 +261,88 @@ jobs:
             echo "Digest: $IMAGE_DIGEST"
           } >> "$GITHUB_STEP_SUMMARY"
 
+    outputs:
+      image_digest: ${{ steps.push.outputs.digest }}
+
+  
+  # update sentinal-gitops repo to deploy version using argocd
+  update-gitops:
+    name: Update GitOps repository
+    needs: publish
+    if: >- 
+      ${{
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/main'
+      }}
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout GitOps repository
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: Dilsh4n/cloudops-sentinel-gitops
+          ref: main
+          token: ${{ secrets.GITOPS_REPO_TOKEN }}
+          path: gitops
+
+      - name: Update deployment image digest
+        working-directory: gitops
+        env:
+          IMAGE_DIGEST: ${{ needs.publish.outputs.image_digest }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          digest = os.environ["IMAGE_DIGEST"]
+
+          if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+              raise SystemExit("Invalid or missing image digest")
+
+          image = f"ghcr.io/dilsh4n/cloudops-sentinel@{digest}"
+
+          path = Path("apps/sentinel-api/deployment.yaml")
+          original = path.read_text()
+
+          updated, count = re.subn(
+              r"(?m)^([ \t]*image:[ \t]*)\S+([ \t]*(?:#.*)?)$",
+              lambda m: f"{m.group(1)}{image}{m.group(2)}",
+              original,
+          )
+
+          if count != 1:
+              raise SystemExit(
+                  f"Expected one container image, found {count}"
+              )
+
+          path.write_text(updated)
+          print(f"Updated deployment image: {image}")
+          PY
+
+      - name: Commit and push GitOps update
+        working-directory: gitops
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add apps/sentinel-api/deployment.yaml
+
+          if git diff --cached --quiet; then
+            echo "Image unchanged. Nothing to commit."
+            exit 0
+          fi
+
+          git commit -m "deploy: sentinel-api ${GITHUB_SHA:0:12}"
+
+          git push origin HEAD:main
+
+
