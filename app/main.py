@@ -20,3 +20,10 @@ def health():
         "status": "healthy",
         "timestamp": datetime.now(UTC).isoformat()
     }
+
+@testapp.get("/version")
+def health():
+    return {
+        "version": "v 0.0.1",
+        "timestamp": datetime.now(UTC).isoformat()
+    }
